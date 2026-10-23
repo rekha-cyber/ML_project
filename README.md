@@ -1,275 +1,170 @@
-![Ironhack logo](https://user-images.githubusercontent.com/23629340/40541063-a07a0a8a-601a-11e8-91b5-2f13e4e6b441.png)
+# Predicting Next-Year Unemployment in European Democracies
 
-# Project 2 | Machine Learning: From Data to Predictions
+**Ironhack | Data Science & Machine Learning — Project 2**  
+**Task:** Supervised regression · **Tools:** Python, pandas, scikit-learn, Jupyter, Matplotlib/Seaborn, joblib
 
-*Data Science & Machine Learning — Week 6*
+## Project overview
 
-Build a supervised machine learning model that a business could actually use. You will frame a prediction problem, prepare the data, compare models honestly, evaluate the winner once, explain what drives it, and demo it live.
+Can we predict a country's **unemployment rate in the following year** using its current economic conditions and the political composition of its government?
 
-`Python` · `scikit-learn` · `Pipelines` · `Cross-validation` · `Model evaluation` · `Keras (image option)`
+This project builds a reproducible machine-learning workflow using the **Comparative Political Data Set (CPDS)**. It compares regression models against simple baselines, evaluates the selected model on later years, and investigates whether political variables contribute useful predictive information.
 
----
+**Main finding:** Ridge regression predicted next-year unemployment reasonably well, but did **not** outperform a simple *persistence baseline* on the held-out test period. Political features provided only a small additional signal in the final model.
 
-## Overview
+## Research question and practical use
 
-In this project you take one dataset from raw files to a saved model that predicts for new data, following the workflow template from Week 5. The point is not the highest score in the class. It is a model whose score you can trust, chosen for reasons you can explain, and judged against a baseline.
+> How accurately can next year's unemployment rate be predicted from this year's unemployment, GDP growth, inflation, and government composition?
 
-- **Format** — in pairs or on your own. Working in a pair, divide the work by stage, not by model, and run each other's notebooks every day.
-- **Duration** — launch on Friday of Week 5, 4 working days, presentations on Friday.
-- **Tools** — Python, pandas, scikit-learn, Matplotlib/Seaborn, joblib, Jupyter, GitHub. Keras for the image option.
-- **Repository** — click **Use this template** at the top of this page to create your own repo.
+The intended use is **exploratory economic forecasting**: a researcher or policy analyst could compare model predictions with simple expectations. The model is **not** intended for operational policy decisions or causal claims about political parties.
 
-### The goal
+The prediction target is a **continuous unemployment rate**, so this is a **regression** problem. The main metric is **mean absolute error (MAE)**, expressed in **percentage points of unemployment**. MAE is intuitive: an MAE of 1.0 corresponds to an average absolute difference of approximately one percentage point between the predicted and observed rates.
 
-Answer one question with a model: *who will leave, what is this house worth, whom should we call, which flower is this?* By Friday you should be able to say how good your model is, compared with what, for whom, and where it should not be trusted.
+## Data
 
-> [!IMPORTANT]
-> Choose your dataset and your target on launch day and stick with them. By Wednesday your pipeline and your cross-validation are built around your columns; switching costs four days of work in two.
+- **Source:** [Comparative Political Data Set (CPDS)](https://cpds-data.org/data/)
+- **Coverage used:** 36 countries, with observations from 2000–2023 (subject to availability after target construction)
+- **Unit of observation:** One country in one year
+- **Target:** Unemployment rate in year **t + 1**
+- **Predictors from year t:** Unemployment rate, real GDP growth, inflation, and the government-composition measures `gov_left`, `gov_centre`, and `gov_right`
 
-<br>
+Next-year unemployment is constructed **within each country**, so that the value for year *t* is matched to year *t + 1*, rather than to another country or a nonconsecutive year. The target is never used as an input feature.
 
-## The workflow at a glance
+**Data attribution:** CPDS, available from the project's official data page. Consult the source codebook for the dataset's definitions and recommended academic citation. **Reuse licence:** A specific licence has not been verified here; please check the source terms before redistributing the raw data.
 
-Your project follows the eleven steps of **The ML Workflow End to End** from Week 5. The brief, the run sheets and the rubric all use them:
+## Methodology
 
-1. **Frame** — the target, the positive class, who uses the prediction, and the metric, chosen from the cost of each mistake.
-2. **Look** — types, missing values, duplicates, the target's distribution, columns that would not be known at prediction time.
-3. **Split once** — a fixed `random_state`, stratified for classification. The test set is not touched again until step 9.
-4. **Baseline** — a `DummyClassifier` or `DummyRegressor`, scored with cross-validation. Every model has to beat it.
-5. **Pipeline** — a `ColumnTransformer` for each column type, then the model. Everything that learns from data goes inside.
-6. **Compare** — at least three model families, the same cross-validation folds, the mean and the spread.
-7. **Tune** — a grid or random search on the best one or two, on the training set.
-8. **Threshold** — for classification, chosen from cross-validated probabilities for a stated reason.
-9. **Test once** — the final model on the test set, compared with the cross-validated estimate.
-10. **Interpret** — what drives the predictions, and where the model goes wrong.
-11. **Save** — the fitted pipeline with `joblib`, reloaded to predict new rows.
+### 1. Explore and prepare
 
-The three notebooks in this template follow that order: `01_eda_and_baseline.ipynb` is steps 1–4, `02_pipelines_and_models.ipynb` is steps 5–8, and `03_evaluation_and_interpretation.ipynb` is steps 9–11.
+The first notebook examines country-year coverage, variable distributions, missing values, and relationships between the predictors and the target. The data is arranged as a country-year panel, then the next-year target is created.
 
-<br>
+### 2. Split chronologically
 
-## Choose your data
+Instead of randomly mixing observations from different years, the evaluation uses a **time-based split**:
 
-Three tabular datasets forming a difficulty ladder, plus an image option. Read [`data/README.md`](data/README.md) for the full description of each, the traps to watch for, and its licence.
+| Split | Feature years | Purpose |
+|---|---|---|
+| Training | 2000–2018 | Cross-validation, model comparison, and tuning |
+| Test | 2019–2022 | Final evaluation on later observations (predicting 2020–2023) |
 
-| | Dataset | Task | Difficulty | Licence |
-|---|---|---|---|---|
-| **1** | **King County house sales** | Regression: the sale price | Gentler start | Public domain |
-| **2** | **Telco customer churn** | Classification: who leaves | Middle | Apache 2.0 |
-| **3** | **Bank Marketing** (UCI) | Imbalanced classification: who subscribes | Hardest | [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) |
-| **4** | **Flower photos** | Image classification: five flowers | Image option | [CC BY 2.0](https://creativecommons.org/licenses/by/2.0/) |
+This gives **684 training rows** and **142 test rows** in the prepared modelling data. A chronological split more closely reflects the forecasting task and reduces the risk of training on future years when predicting earlier years. It does not eliminate every potential source of dependence between country-year observations.
 
-Fetch whichever you choose with the included script:
+### 3. Establish baselines
 
-```bash
-python download_data.py houses    # or: telco, bank, flowers
-```
+Two simple reference approaches help determine whether machine learning adds value:
 
-Files land in `data/raw/`, which is gitignored. **Do not commit data.** Anyone cloning your repo runs the same script.
+- **Dummy baseline:** Predict a constant learned from the training data.
+- **Persistence baseline:** Predict that next year's unemployment will equal this year's unemployment: `unemployment_t+1 = unemployment_t`.
 
-> [!NOTE]
-> **Bringing your own dataset?** You may, and you are graded on exactly the same rubric. It needs a clear target, at least a few thousand rows (or a few hundred images per class), features that would all be known at prediction time, and a licence that permits educational use. Clear it with your teacher on launch day, not on Wednesday.
+The persistence baseline is particularly important because unemployment rates tend to change gradually, so the current rate is already a useful predictor.
 
-### The image option
+### 4. Build, compare, and tune models
 
-Option 4 is for the material from Week 5 Thursday: a CNN trained from scratch, then transfer learning with a pretrained network. The workflow is the same, with three differences:
+The main preprocessing and modelling workflow uses scikit-learn pipelines, including **median imputation** for missing numeric values and **feature scaling** for models that need it. Model families were compared using cross-validation on the training data, and Ridge regression was selected and tuned.
 
-- **The baseline** is the majority class, then a small CNN from scratch; the real model is a pretrained network (for example `MobileNetV2`) with a new output layer.
-- **The pipeline lives in the model.** Resizing, rescaling and augmentation are Keras layers, and `image_dataset_from_directory` reads the folders. There is no `ColumnTransformer`.
-- **Validation is a fixed split**, not cross-validation: training, validation and test sets chosen once with a seed. Training on a CPU makes repeated folds too slow.
+| Approach | Cross-validation MAE (percentage points) |
+|---|---:|
+| Dummy baseline | 3.364 |
+| Persistence baseline | 0.848 |
+| Linear Regression | 0.758 |
+| Ridge Regression (tuned) | **0.757** |
+| Random Forest | 1.007 |
 
-It needs TensorFlow (`python -c "import tensorflow"`) and the download is 218 MB. Everything else in this brief applies.
+*Lower MAE is better. These are training-period cross-validation estimates, not test-set scores. Cross-validation results should be interpreted with the notebook's exact fold design in mind.*
 
-<br>
+Ridge only narrowly outperformed ordinary linear regression in cross-validation. Its regularization makes it a reasonable, comparatively simple final candidate, but the difference of **0.001 percentage points** should not be read as meaningful superiority.
 
-## Day-by-day breakdown
+## Final evaluation
 
-Launch day (Friday of Week 5) is when you settle who you are working with, pick your dataset and target, create your repo, download the data and write your framing — so Monday starts with the data in front of you.
+The chosen Ridge pipeline was evaluated on the held-out later-year test data.
 
-### Day 1 — EDA and baseline
+| Metric / model | Test result |
+|---|---:|
+| Ridge — MAE | **1.044 percentage points** |
+| Ridge — RMSE | 1.339 percentage points |
+| Ridge — R² | 0.741 |
+| Persistence baseline — MAE | **0.768 percentage points** |
+| Dummy baseline — MAE | 2.853 percentage points |
 
-- Finish **`01_eda_and_baseline.ipynb`**: shape and types, data quality, the target, the features against the target.
-- **Find the columns that would not be known at prediction time** and drop them, with the reason written down.
-- **Split once** and score the **baseline** with cross-validation on the training set.
+Ridge explained a substantial share of variation in the held-out targets (**R² = 0.741**) and beat the constant-value dummy baseline. **However, persistence achieved a lower test MAE than Ridge.** In this time period, simply carrying forward the current unemployment rate gave more accurate forecasts on average.
 
-> [!TIP]
-> By the end of today you should be able to say your metric and your baseline score out loud. If you cannot, you are behind.
+The gap between Ridge's cross-validation MAE (**0.757**) and test MAE (**1.044**) also illustrates why checking performance on later years matters.
 
-### Day 2 — Pipelines and features
+## Do political features improve prediction?
 
-Today is the core engineering day, and the one the week turns on.
+To investigate whether government composition was materially influencing the Ridge model's predictions, the political features were shuffled in a diagnostic experiment while the other features remained unchanged.
 
-- Build **one complete `Pipeline`**: a `ColumnTransformer` that imputes, scales and encodes each type of column, then a model.
-- Score it with **cross-validation** against the baseline.
-- Add features **inside the pipeline** — a ratio, an age, a flag, a log — and keep the ones that improve the cross-validated score.
-- *Image option:* load the folders with `image_dataset_from_directory`, add rescaling and augmentation layers, and train a CNN from scratch with early stopping. Plot the training curves.
+| Experiment | MAE (percentage points) |
+|---|---:|
+| Original Ridge predictions | 1.044 |
+| Political features shuffled | 1.070 |
+| Change in MAE | **+0.026** |
 
-> [!IMPORTANT]
-> **Anyone without a pipeline scored with cross-validation on Tuesday evening has no Wednesday.** Everything after this builds on it.
+Shuffling the political features made the predictions slightly worse. This suggests that the political variables contain **some predictive information in this fitted model**, but their contribution is small compared with the information available from economic conditions, particularly the current unemployment rate.
 
-### Day 3 — Compare, tune, choose
+**Important:** This is a predictive sensitivity check, **not evidence that a government's political orientation causes changes in unemployment**. The political measures may also be correlated with one another or with economic and country-specific conditions.
 
-- Compare **at least three model families** — for example a linear model, a tree-based model and an ensemble — with the same folds, in **`02_pipelines_and_models.ipynb`**.
-- **Tune** the best one or two with `GridSearchCV` or `RandomizedSearchCV`, on the training set.
-- For classification, **choose the threshold** from cross-validated probabilities.
-- Choose your final model, and say why — including when a simpler model is within the noise of the best one.
-- *Image option:* transfer learning — a frozen pretrained network with a new output layer, against your CNN from scratch. Fine-tuning is optional.
+## Interpretation and limitations
 
-### Day 4 — Test once, interpret, communicate
+- **Strong persistence:** Current unemployment is a powerful starting point for forecasting unemployment one year ahead.
+- **Performance varies across time:** A strong cross-validation result does not guarantee superior performance on later years.
+- **Political signal is limited:** Disturbing political features produced only a small increase in Ridge's MAE.
+- **Prediction is not causation:** The model cannot establish the effect of government ideology on economic outcomes.
+- **Limited scope:** The results cover the available CPDS countries and years, not every country or future economic regime.
+- **Dependence and shocks:** Country-year observations are not fully independent, and unexpected economic shocks can limit predictability.
 
-- In **`03_evaluation_and_interpretation.ipynb`**, evaluate the final model **once** on the test set.
-- Analyse the errors: the confusion matrix, or the residuals, and where the model is worst.
-- Explain what drives the predictions with **permutation importance**, and read it with care.
-- **Save the fitted pipeline** with `joblib` and reload it to predict new rows: this is your demo.
-- Write your README, build your slides, and **rehearse once, timed**.
+**Conclusion:** The machine-learning workflow successfully produced and tested a reproducible regression model, but the **persistence baseline is the more accurate choice by test MAE for this dataset and evaluation period**. A worthwhile next step would be to model *changes* in unemployment or investigate country-specific patterns, always comparing against the persistence benchmark.
 
-> [!NOTE]
-> **Notebook 03 is your report.** It is read on its own, by someone who has not seen notebooks 01 and 02: the question, the evidence, what you concluded and how far to trust it.
+## Repository structure
 
-<br>
-
-## Deliverables
-
-Your main deliverable is your GitHub repo, created from this template, containing:
-
-| Item | Description |
-|---|---|
-| `README.md` | Your project: the question, the data and its licence, the metric, the models compared, the final result against the baseline, and how to reproduce it. Replace this brief with your own. |
-| `notebooks/01_eda_and_baseline.ipynb` | Framing, EDA, the split and the baseline. |
-| `notebooks/02_pipelines_and_models.ipynb` | Pipelines, features, the model comparison, tuning and the threshold. |
-| `notebooks/03_evaluation_and_interpretation.ipynb` | **The report.** The test-set evaluation, the error analysis, the interpretation, and saving and reloading the model. |
-| `src/functions.py` | Reusable functions. Your logic lives in functions, not pasted into cells. |
-| `download_data.py` | Left as it is, or extended if you brought your own data. |
-| Slides | Linked or committed in your README, so they can be read after the presentation. Any tool. |
-
-The saved model in `models/` is gitignored: notebook 03 recreates it, so anyone can reproduce it.
-
-### Minimum requirements
-
-Your project must meet all of these to pass:
-
-- **Framing** — a stated target, positive class, user and decision, and a metric chosen from the cost of each mistake.
-- **No leakage** — columns not known at prediction time dropped; the test set used once; every step that learns from data inside the pipeline.
-- **Baseline** — scored with the same cross-validation as the models.
-- **Comparison** — at least **3 model families** on the same folds, with the mean and spread. *Image option:* a CNN from scratch and a transfer-learning model.
-- **Tuning** — the best one or two tuned on the training set.
-- **Evaluation** — the final model evaluated once on the test set, with an error analysis and, for classification, a justified threshold.
-- **Interpretation** — what drives the predictions, explained.
-- **A saved model** — reloaded to predict new data, in the notebook and in the demo.
-
-The full grading rubric is in [`RUBRIC.md`](RUBRIC.md). Read it on launch day — it tells you exactly what is being evaluated.
-
-<br>
-
-## Advanced features (optional)
-
-Not required, but they will strengthen your project:
-
-- **Learning curves** — does more data help? Train on growing fractions and plot the cross-validated score.
-- **Stacking** — a `StackingClassifier` or `StackingRegressor` over your best models, compared fairly with them.
-- **Segmented evaluation** — the error by group (by contract type, by price band, by job), and where the model should not be used.
-- **Cost-based threshold** — put a money value on each kind of mistake and choose the threshold that minimises the total.
-- **A tiny app** — a Streamlit page that loads your saved model and predicts from a form or an uploaded photo.
-- *Image option:* fine-tune the top of the pretrained network after training the new layer, or compare two pretrained networks.
-
-<br>
-
-## Coding best practices
-
-- **Modularise.** Python logic in `src/functions.py` with reusable functions. The notebook is for the narrative.
-- **One seed.** Define `RANDOM_STATE` once and pass it everywhere, so a second run gives the same numbers.
-- **Name clearly.** Descriptive names for variables, functions and columns. `snake_case` throughout.
-- **Clean up.** Remove unused imports, commented-out code and test cells before submitting.
-- **Restart and run all.** Before you commit a notebook, run it top to bottom on a fresh kernel.
-- **Commit often.** Small, frequent commits with descriptive messages. Working in a pair, your partner should know what you worked on from the history alone.
-
-<br>
-
-## Presentation guidelines
-
-| Component | Duration |
-|---|---|
-| Talking with slides | 7 minutes |
-| Live demo | 3 minutes |
-| **Total** | **10 minutes** |
-
-> [!IMPORTANT]
-> **You present from your own machine by sharing your screen.** Use whatever slide tool you prefer. The demo loads your saved model and predicts for new data: a customer, a house, a client, a photo. Have it open and ready before your slot.
-
-### Suggested slide structure (~10 slides)
-
-1. **Title** — project title and your name or names.
-2. **The problem** — what you predict, for whom, and what they would do with it.
-3. **The data** — source and licence, what one row is, the traps you found.
-4. **The metric and the baseline** — why this metric, and the score to beat.
-5. **What you tried** — the model comparison, with the spread.
-6. **The final model** — the test-set result against the baseline and the cross-validated estimate.
-7. **Where it goes wrong** — the error analysis.
-8. **What drives it** — the interpretation, in business terms.
-9. **Conclusions and limitations** — would you use it, and where not?
-10. **Closing** — project title, your name or names, thank you.
-
-<br>
-
-## Repo layout
-
-The notebooks are laid out in sections with the intent of each one written down, and `src/functions.py` holds a few empty stubs that exist only to show the shape. **This is a place to start, not a template to fill in** — rename things, add sections, delete the ones that do not fit your data. You are graded on the work, not on how closely you followed the scaffold.
-
-```
+```text
 .
-├── README.md                                    this brief — replace it with your own
-├── RUBRIC.md                                    how you are graded
+├── README.md
 ├── requirements.txt
-├── download_data.py                             fetches your chosen dataset into data/raw/
-├── data/
-│   ├── raw/                                     downloaded data, gitignored
-│   └── README.md                                the four options, their traps, licences
-├── models/                                      the saved model, gitignored
 ├── notebooks/
-│   ├── 01_eda_and_baseline.ipynb                frame, look, split, baseline
-│   ├── 02_pipelines_and_models.ipynb            pipelines, compare, tune, threshold
-│   └── 03_evaluation_and_interpretation.ipynb   test once, interpret, save, report
-└── src/
-    └── functions.py                             your reusable logic
+│   ├── 01_eda_and_baseline.ipynb
+│   ├── 02_pipelines_and_models.ipynb
+│   └── 03_evaluation_and_interpretation.ipynb
+├── src/
+│   └── functions.py
+├── data/                  # place locally sourced data here
+└── models/                # generated model artefacts
 ```
 
-## Getting set up
+*The directory tree shows the intended project organization. Keep only folders and files that actually exist in the submitted repository.*
 
-```bash
-# 1. Click "Use this template" above, then clone YOUR new repo
-git clone https://github.com/<your-username>/<your-repo>.git
-cd <your-repo>
+### Notebook guide
 
-# 2. Check you already have the libraries - a current Anaconda install does.
-#    If this prints, skip to step 3 and install nothing.
-python -c "import pandas, numpy, matplotlib, seaborn, sklearn, joblib; print('all present')"
+1. **`01_eda_and_baseline.ipynb`** — problem framing, data exploration, target construction, chronological split, and baseline analysis.
+2. **`02_pipelines_and_models.ipynb`** — preprocessing, cross-validation, model comparison, Ridge tuning, and model selection.
+3. **`03_evaluation_and_interpretation.ipynb`** — final test evaluation, error analysis, feature interpretation, political-feature shuffling, and model export.
 
-#    Image option only: TensorFlow is not part of Anaconda.
-python -c "import tensorflow as tf; print(tf.__version__)"
+## How to reproduce
 
-#    Only if a check failed. See the note in requirements.txt first: running pip
-#    against a conda environment can downgrade packages you did not ask about.
-pip install -r requirements.txt
+1. Clone this repository and open a terminal in its root directory.
+2. Create and activate a Python environment (recommended).
+3. Install dependencies:
 
-# 3. Download your dataset
-python download_data.py telco        # or: houses, bank, flowers
+   ```bash
+   python -m pip install -r requirements.txt
+   ```
 
-# 4. Open the first notebook
-jupyter lab notebooks/01_eda_and_baseline.ipynb
-```
+4. Download the relevant CPDS data from the [official source](https://cpds-data.org/data/) and put it at the location expected by the first notebook. **Raw data is not included in this README.**
+5. Launch Jupyter:
 
-<br>
+   ```bash
+   jupyter lab
+   ```
 
-## Tips for success
+6. Run notebooks **01 → 02 → 03**, from top to bottom, adapting any local raw-data paths to your environment.
 
-1. **Choose your data on launch day and commit to it.** Switching mid-week costs you time you do not have.
-2. **Beat the baseline before you beat anyone else.** A model that cannot beat a dummy is not a model.
-3. **Never look at the test set until Thursday.** Every peek makes your final number a little less true.
-4. **Put everything that learns inside the pipeline.** A scaler fitted before the split is the most common way to fool yourself.
-5. **Prefer a simple model you understand** when a complex one is within the noise.
-6. **Commit early and often.** In a pair, so your partner knows what changed; on your own, so you do.
-7. **Ask for help early.** Stuck for more than 30 minutes? Reach out to a classmate, your TA or your teacher.
-8. **Practise the presentation out loud** at least once before Friday. Time yourselves.
-9. **Read [`RUBRIC.md`](RUBRIC.md).** It tells you exactly what is being evaluated.
+The trained pipeline is saved as **`models/ridge_unemployment.pkl`** in the project workflow. Reload it using `joblib` only in an environment you trust, and pass new data with the **same feature names, meanings, and units** used during training. Model artefacts generated by notebook 03 can be excluded from Git if the notebook recreates them.
 
-Good luck. Make something you would trust.
+## Presentation
+
+The project presentation covers the prediction problem, features, baselines, model comparison, chronological test results, political-feature sensitivity analysis, and the limitations of drawing causal conclusions from prediction models.
+
+## Data source
+
+Comparative Political Data Set (CPDS): https://cpds-data.org/data/
+
+For formal reuse, consult the CPDS website and codebook for version-specific attribution, methodology, and licensing terms.
